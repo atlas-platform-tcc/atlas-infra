@@ -30,8 +30,16 @@ application deployment lives in `atlas-gitops` + Argo CD.
 atlas-api → opens a PR adding services/svc-<name>.tf → human review + merge → runner: terraform apply → kind
 ```
 
-The merge is the human gate; Terraform never runs before it. `tfstate` is local to the runner and
-gitignored (it may contain secrets).
+The merge is the human gate; Terraform never runs before it.
+
+### Terraform state
+
+The `tfstate` is kept under `$HOME/atlas-tfstate/` on the runner — **outside** the Actions working
+directory (`_work`). This is deliberate: `actions/checkout` cleans the workspace (`git clean -ffdx`)
+on every run, which would delete a gitignored state file living next to the code and make Terraform
+lose track of what it created (orphaned namespaces/databases). The path is supplied at `init` time via
+`-backend-config` (see `.github/workflows/terraform.yml`), so no host-specific path is committed. The
+state is local to the runner and never committed (it may contain secrets).
 
 ## Toolchain
 

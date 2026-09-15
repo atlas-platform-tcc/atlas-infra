@@ -29,7 +29,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - run: terraform init -input=false
+      - name: Terraform init (state persisted outside the runner workdir)
+        # The state file lives under $HOME (outside _work), so actions/checkout's
+        # clean step cannot delete it between runs. Without this, Terraform starts
+        # from an empty state each run and loses track of created resources.
+        run: |
+          mkdir -p "$HOME/atlas-tfstate"
+          terraform init -input=false \
+            -backend-config="path=$HOME/atlas-tfstate/terraform.tfstate"
       - name: Plan (pull request)
         if: github.event_name == 'pull_request'
         run: terraform plan -input=false -no-color

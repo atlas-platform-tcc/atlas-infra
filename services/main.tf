@@ -4,6 +4,15 @@
 
 terraform {
   required_version = ">= 1.5"
+
+  # The Terraform state is kept OUTSIDE the Actions runner working directory.
+  # actions/checkout cleans the workspace (git clean -ffdx) at the start of every
+  # run, which would delete a gitignored state file living next to the code and make
+  # Terraform lose track of what it created (orphaned namespaces/databases). The
+  # concrete absolute path is supplied at init time via -backend-config (see
+  # .github/workflows/terraform.yml), keeping host specifics out of version control.
+  backend "local" {}
+
   required_providers {
     kubernetes = {
       source  = "hashicorp/kubernetes"
