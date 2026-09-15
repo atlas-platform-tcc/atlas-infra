@@ -3,6 +3,9 @@
 # Bootstrap the Atlas local environment from scratch:
 #   kind cluster  ->  Argo CD  ->  root Application (app-of-apps)  ->  Argo CD reconciles everything from git.
 #
+# Services are created by the Golden Path (atlas-api), which adds their entries to
+# atlas-gitops/apps/; the root Application then reconciles them here.
+#
 # Idempotent: safe to re-run. Requires the Docker daemon running.
 # Usage:  ./atlas-infra/bootstrap.sh
 set -euo pipefail
@@ -13,30 +16,22 @@ ARGOCD_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manif
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "==> 1/4  kind cluster"
+echo "==> 1/3  kind cluster"
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   echo "    cluster '$CLUSTER' already exists — skipping create"
 else
   kind create cluster --config "$SCRIPT_DIR/kind-config.yaml"
 fi
 
-# Local-dev shim: with no registry, the service image must live inside the kind node.
-# In the full flow CI publishes an immutable image to a registry and this step goes away.
-echo "==> 2/4  build + load service image (local dev, no registry)"
-docker build -t hello-service:dev "$ROOT/atlas-templates/go-service-template"
-kind load docker-image hello-service:dev --name "$CLUSTER"
-
-echo "==> 3/4  Argo CD (server-side apply avoids the oversized-CRD error)"
+echo "==> 2/3  Argo CD (server-side apply avoids the oversized-CRD error)"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n argocd --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
 kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=180s
 kubectl -n argocd rollout status deploy/argocd-server --timeout=180s
 
-echo "==> 4/4  root Application (app-of-apps) — Argo CD reconciles the rest from git"
+echo "==> 3/3  root Application (app-of-apps) — Argo CD reconciles services from git"
 kubectl apply -f "$ROOT/atlas-gitops/bootstrap/root.yaml"
 
 echo
 echo "Done. Watch reconciliation with:"
 echo "  kubectl -n argocd get applications"
-echo "  kubectl -n hello get pods"
-echo "  curl -s http://localhost:30080/healthz   # -> ok"
