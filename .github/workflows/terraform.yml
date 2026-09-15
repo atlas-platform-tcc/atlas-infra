@@ -21,6 +21,11 @@ jobs:
     defaults:
       run:
         working-directory: services
+    # GHCR pull credentials for the ghcr-pull image pull secret (private images).
+    # Set GHCR_PULL_USERNAME / GHCR_PULL_TOKEN (read:packages) as repository secrets.
+    env:
+      TF_VAR_ghcr_username: ${{ secrets.GHCR_PULL_USERNAME }}
+      TF_VAR_ghcr_token: ${{ secrets.GHCR_PULL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3

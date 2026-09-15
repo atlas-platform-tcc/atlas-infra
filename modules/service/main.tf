@@ -24,10 +24,53 @@ variable "database_type" {
   default = ""
 }
 
+variable "ghcr_server" {
+  type        = string
+  description = "container registry host for the image pull secret"
+  default     = "ghcr.io"
+}
+
+variable "ghcr_username" {
+  type        = string
+  description = "registry username for pulling private images (empty disables the pull secret)"
+  default     = ""
+}
+
+variable "ghcr_token" {
+  type        = string
+  description = "registry token (read:packages) for pulling private images"
+  default     = ""
+  sensitive   = true
+}
+
 resource "kubernetes_namespace_v1" "this" {
   metadata {
     name   = var.name
     labels = { "app.kubernetes.io/part-of" = "atlas" }
+  }
+}
+
+# Image pull secret so the service (private image in GHCR) can be pulled by the
+# cluster. Credentials come from Terraform variables (provided by the runner as
+# TF_VAR_ghcr_*), never committed to git. The base Helm chart references it by
+# name (ghcr-pull). Created only when a token is provided.
+resource "kubernetes_secret_v1" "ghcr_pull" {
+  count = var.ghcr_token != "" ? 1 : 0
+  metadata {
+    name      = "ghcr-pull"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+  type = "kubernetes.io/dockerconfigjson"
+  data = {
+    ".dockerconfigjson" = jsonencode({
+      auths = {
+        (var.ghcr_server) = {
+          username = var.ghcr_username
+          password = var.ghcr_token
+          auth     = base64encode("${var.ghcr_username}:${var.ghcr_token}")
+        }
+      }
+    })
   }
 }
 

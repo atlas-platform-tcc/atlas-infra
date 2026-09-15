@@ -22,6 +22,23 @@ variable "kube_context" {
   default     = "kind-atlas-local"
 }
 
+# GHCR pull credentials, provided by the runner as TF_VAR_ghcr_username /
+# TF_VAR_ghcr_token (GitHub Actions secrets). Each generated svc-<name>.tf passes
+# these to the service module, which creates the ghcr-pull secret in the namespace.
+# Never committed to git; kept only in tfstate (also gitignored).
+variable "ghcr_username" {
+  type        = string
+  description = "GHCR username for pulling private service images"
+  default     = ""
+}
+
+variable "ghcr_token" {
+  type        = string
+  description = "GHCR token (read:packages) for pulling private service images"
+  default     = ""
+  sensitive   = true
+}
+
 provider "kubernetes" {
   config_path    = "~/.kube/config"
   config_context = var.kube_context
