@@ -1,0 +1,8 @@
+*.tmp
+# Terraform (state may contain secrets — never commit)
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log

@@ -1,0 +1,15 @@
+# Cluster local de experimentação do Atlas (ADR atlas-infra/0001 — kind).
+# Declarativo e versionado: o cluster inteiro é recriável a partir deste arquivo.
+#   kind create cluster --config atlas-infra/kind-config.yaml
+#   kind delete cluster --name atlas-local
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: atlas-local
+nodes:
+  - role: control-plane
+    # Mapeia um NodePort (30080) para o host, permitindo alcançar o serviço em
+    # http://localhost:30080 sem port-forward. Alternativamente, use `kubectl port-forward`.
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP

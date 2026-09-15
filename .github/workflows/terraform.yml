@@ -1,0 +1,33 @@
+# Applies the service infrastructure with Terraform.
+#  - Pull request: `terraform plan` (for human review).
+#  - Push to main (i.e. after the PR is merged): `terraform apply`.
+#
+# Runs on a SELF-HOSTED runner because the target is a local kind cluster that a
+# cloud-hosted runner cannot reach. The runner uses the host's kubeconfig.
+name: terraform
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: [self-hosted]
+    defaults:
+      run:
+        working-directory: services
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init -input=false
+      - name: Plan (pull request)
+        if: github.event_name == 'pull_request'
+        run: terraform plan -input=false -no-color
+      - name: Apply (merged to main)
+        if: github.event_name == 'push'
+        run: terraform apply -input=false -auto-approve -no-color
