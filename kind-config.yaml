@@ -7,9 +7,19 @@ apiVersion: kind.x-k8s.io/v1alpha4
 name: atlas-local
 nodes:
   - role: control-plane
-    # Mapeia um NodePort (30080) para o host, permitindo alcançar o serviço em
-    # http://localhost:30080 sem port-forward. Alternativamente, use `kubectl port-forward`.
+    # ingress-ready=true habilita o nó a receber o ingress-nginx (ADR atlas-infra/0007).
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
     extraPortMappings:
-      - containerPort: 30080
-        hostPort: 30080
+      # 80/443 do host -> ingress-nginx: cada serviço é alcançado por seu host
+      # (ex.: http://payments.127.0.0.1.nip.io) sem port-forward (ADR atlas-templates/0006).
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
         protocol: TCP

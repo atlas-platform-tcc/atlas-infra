@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Bootstrap the Atlas local environment from scratch:
-#   kind cluster  ->  Argo CD  ->  root Application (app-of-apps)  ->  Argo CD reconciles everything from git.
+#   kind cluster  ->  Argo CD  ->  ingress-nginx  ->  root Application (app-of-apps)  ->  Argo CD reconciles everything from git.
 #
 # Services are created by the Golden Path (atlas-api), which adds their entries to
 # atlas-gitops/apps/; the root Application then reconciles them here.
@@ -12,18 +12,20 @@ set -euo pipefail
 
 CLUSTER="atlas-local"
 ARGOCD_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+# ingress-nginx manifest for the kind provider (maps to the host's 80/443, ADR atlas-infra/0007).
+INGRESS_MANIFEST="https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "==> 1/3  kind cluster"
+echo "==> 1/4  kind cluster"
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   echo "    cluster '$CLUSTER' already exists — skipping create"
 else
   kind create cluster --config "$SCRIPT_DIR/kind-config.yaml"
 fi
 
-echo "==> 2/3  Argo CD (server-side apply avoids the oversized-CRD error)"
+echo "==> 2/4  Argo CD (server-side apply avoids the oversized-CRD error)"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n argocd --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
 
@@ -40,7 +42,14 @@ kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=180s
 kubectl -n argocd rollout status deploy/argocd-server --timeout=180s
 kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=180s
 
-echo "==> 3/3  root Application (app-of-apps) — Argo CD reconciles services from git"
+echo "==> 3/4  ingress-nginx (exposes each service on http://<name>.127.0.0.1.nip.io)"
+kubectl apply -f "$INGRESS_MANIFEST"
+# The admission webhook must be Ready before any Ingress can be admitted; without
+# this wait, the first service's Ingress apply can race and fail.
+kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=180s
+kubectl -n ingress-nginx wait --for=condition=complete job/ingress-nginx-admission-patch --timeout=120s || true
+
+echo "==> 4/4  root Application (app-of-apps) — Argo CD reconciles services from git"
 kubectl apply -f "$ROOT/atlas-gitops/bootstrap/root.yaml"
 
 echo
