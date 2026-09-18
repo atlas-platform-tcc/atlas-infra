@@ -28,6 +28,8 @@ jobs:
       TF_VAR_ghcr_token: ${{ secrets.GHCR_PULL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need HEAD~1 to diff which svc-*.tf changed (Atlas infra events)
       - uses: hashicorp/setup-terraform@v3
       - name: Terraform init (state persisted outside the runner workdir)
         # The state file lives under $HOME (outside _work), so actions/checkout's
@@ -43,3 +45,33 @@ jobs:
       - name: Apply (merged to main)
         if: github.event_name == 'push'
         run: terraform apply -input=false -auto-approve -no-color
+      - name: Report infra events to Atlas (best-effort)
+        # Records infra.applied / infra.destroyed per changed service (ADR atlas-api/0017).
+        # The self-hosted runner reaches the local API (default http://localhost:8081);
+        # override with the ATLAS_API_URL repo variable. Never fails the apply.
+        if: github.event_name == 'push'
+        working-directory: ${{ github.workspace }}
+        env:
+          ATLAS_API_URL: ${{ vars.ATLAS_API_URL }}
+          # Cloudflare Access service-token headers (optional; only needed if ATLAS_API_URL
+          # points through Cloudflare Access rather than the local http://localhost:8081).
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          API="${ATLAS_API_URL:-http://localhost:8081}"
+          git rev-parse HEAD~1 >/dev/null 2>&1 || { echo "no previous commit — skipping"; exit 0; }
+          hdrs=(-H 'content-type: application/json' -H 'X-Atlas-Actor: terraform-runner')
+          if [ -n "${CF_ACCESS_CLIENT_ID:-}" ]; then
+            hdrs+=(-H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID}" -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET}")
+          fi
+          git diff --name-status HEAD~1 HEAD -- services/ | while read -r status file; do
+            case "$file" in services/svc-*.tf) ;; *) continue ;; esac
+            name="$(basename "$file" .tf)"; name="${name#svc-}"
+            case "$status" in
+              D*) etype="infra.destroyed" ;;
+              *)  etype="infra.applied" ;;
+            esac
+            curl -fsS -X POST "${API}/services/${name}/events" "${hdrs[@]}" \
+              -d "{\"type\":\"${etype}\",\"detail\":\"terraform ${status}\"}" \
+              && echo "reported ${etype} for ${name}" || echo "Atlas API unreachable — skipped ${name}"
+          done
