@@ -113,7 +113,7 @@ resource "kubernetes_stateful_set_v1" "postgres" {
       spec {
         container {
           name  = "postgres"
-          image = "postgres:16"
+          image = "postgres:16.4" # pinned patch tag
           port {
             container_port = 5432
           }
@@ -121,6 +121,47 @@ resource "kubernetes_stateful_set_v1" "postgres" {
             secret_ref {
               name = kubernetes_secret_v1.db[0].metadata[0].name
             }
+          }
+          volume_mount {
+            name       = "data"
+            mount_path = "/var/lib/postgresql/data"
+          }
+          readiness_probe {
+            exec {
+              command = ["pg_isready", "-U", var.name, "-d", var.name]
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 10
+          }
+          liveness_probe {
+            exec {
+              command = ["pg_isready", "-U", var.name, "-d", var.name]
+            }
+            initial_delay_seconds = 15
+            period_seconds        = 20
+          }
+          resources {
+            requests = {
+              cpu    = "50m"
+              memory = "64Mi"
+            }
+            limits = {
+              cpu    = "250m"
+              memory = "256Mi"
+            }
+          }
+        }
+      }
+    }
+    volume_claim_template {
+      metadata {
+        name = "data"
+      }
+      spec {
+        access_modes = ["ReadWriteOnce"]
+        resources {
+          requests = {
+            storage = "1Gi"
           }
         }
       }

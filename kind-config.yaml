@@ -16,7 +16,7 @@ nodes:
             node-labels: "ingress-ready=true"
     extraPortMappings:
       # 80/443 do host -> ingress-nginx: cada serviço é alcançado por seu host
-      # (ex.: http://payments.127.0.0.1.nip.io) sem port-forward (ADR atlas-templates/0006).
+      # (ex.: http://payments-service.127.0.0.1.nip.io) sem port-forward (ADR atlas-templates/0006).
       - containerPort: 80
         hostPort: 80
         protocol: TCP

@@ -11,9 +11,11 @@
 set -euo pipefail
 
 CLUSTER="atlas-local"
-ARGOCD_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+# pinned for reproducibility; bump deliberately
+ARGOCD_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.3/manifests/install.yaml"
 # ingress-nginx manifest for the kind provider (maps to the host's 80/443, ADR atlas-infra/0007).
-INGRESS_MANIFEST="https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml"
+# pinned for reproducibility; bump deliberately
+INGRESS_MANIFEST="https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/kind/deploy.yaml"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

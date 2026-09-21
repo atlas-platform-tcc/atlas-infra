@@ -15,6 +15,12 @@ on:
 permissions:
   contents: read
 
+# Serialize runs: the local backend state file has no locking, so overlapping
+# applies on the self-hosted runner could corrupt it. Never cancel an in-flight apply.
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
 jobs:
   terraform:
     runs-on: [self-hosted]
