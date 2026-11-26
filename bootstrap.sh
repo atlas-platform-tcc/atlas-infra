@@ -36,9 +36,17 @@ kubectl apply -n argocd --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
 # polling is how new services (root discovery) and promotions (day-2 deploy) show
 # up quickly without a manual `argocd app get --refresh`. The application-controller
 # reads timeout.reconciliation from argocd-cm, so it must be restarted to pick it up.
+#
+# The same patch enables the read-only `atlas` account that atlas-api uses to read
+# sync/health (ADR atlas-api/0012): apiKey only (no UI login), and an RBAC role that can
+# only get/list Applications. argocd-server must be restarted to pick up accounts/RBAC.
+# The token itself is a secret and is generated after bootstrap (printed at the end).
 kubectl -n argocd patch configmap argocd-cm --type merge \
-  -p '{"data":{"timeout.reconciliation":"30s"}}'
+  -p '{"data":{"timeout.reconciliation":"30s","accounts.atlas":"apiKey"}}'
+kubectl -n argocd patch configmap argocd-rbac-cm --type merge \
+  -p '{"data":{"policy.csv":"p, role:atlas-ro, applications, get, */*, allow\np, role:atlas-ro, applications, list, */*, allow\ng, atlas, role:atlas-ro"}}'
 kubectl -n argocd rollout restart statefulset argocd-application-controller
+kubectl -n argocd rollout restart deploy/argocd-server
 
 kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=180s
 kubectl -n argocd rollout status deploy/argocd-server --timeout=180s
@@ -57,3 +65,7 @@ kubectl apply -f "$ROOT/atlas-gitops/bootstrap/root.yaml"
 echo
 echo "Done. Watch reconciliation with:"
 echo "  kubectl -n argocd get applications"
+echo
+echo "Optional — observed state in atlas-api (sync/health). The 'atlas' account is ready;"
+echo "generate its token (a secret, never committed; a new cluster needs a new token):"
+echo "  ./atlas-infra/argocd-token.sh   # -> ARGOCD_TOKEN in atlas-api/.env"
