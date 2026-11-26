@@ -31,21 +31,24 @@ echo "==> 2/4  Argo CD (server-side apply avoids the oversized-CRD error)"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -n argocd --server-side --force-conflicts -f "$ARGOCD_MANIFEST"
 
-# Faster reconciliation for local development: poll git every 30s instead of the
-# default 180s. A GitHub webhook cannot reach a local kind cluster, so shorter
-# polling is how new services (root discovery) and promotions (day-2 deploy) show
-# up quickly without a manual `argocd app get --refresh`. The application-controller
-# reads timeout.reconciliation from argocd-cm, so it must be restarted to pick it up.
+# Faster reconciliation for local development: poll git every 10s with no jitter,
+# instead of the default 120s plus up to 60s of jitter. A GitHub webhook cannot reach
+# a local kind cluster, so shorter polling is how new services (root discovery) and
+# promotions (day-2 deploy) show up quickly without a manual refresh. Jitter is pinned
+# to 0 so the discovery delay is bounded (0-10s) and repeatable across evaluation runs.
+# The application-controller and repo-server read these keys from argocd-cm at startup,
+# so both are restarted to pick them up.
 #
 # The same patch enables the read-only `atlas` account that atlas-api uses to read
 # sync/health (ADR atlas-api/0012): apiKey only (no UI login), and an RBAC role that can
 # only get/list Applications. argocd-server must be restarted to pick up accounts/RBAC.
 # The token itself is a secret and is generated after bootstrap (printed at the end).
 kubectl -n argocd patch configmap argocd-cm --type merge \
-  -p '{"data":{"timeout.reconciliation":"30s","accounts.atlas":"apiKey"}}'
+  -p '{"data":{"timeout.reconciliation":"10s","timeout.reconciliation.jitter":"0s","accounts.atlas":"apiKey"}}'
 kubectl -n argocd patch configmap argocd-rbac-cm --type merge \
   -p '{"data":{"policy.csv":"p, role:atlas-ro, applications, get, */*, allow\np, role:atlas-ro, applications, list, */*, allow\ng, atlas, role:atlas-ro"}}'
 kubectl -n argocd rollout restart statefulset argocd-application-controller
+kubectl -n argocd rollout restart deploy/argocd-repo-server
 kubectl -n argocd rollout restart deploy/argocd-server
 
 kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=180s

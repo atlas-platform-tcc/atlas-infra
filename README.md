@@ -9,8 +9,8 @@ application deployment lives in `atlas-gitops` + Argo CD.
 - `kind-config.yaml` — declarative local cluster definition (host ports 80/443 mapped to
   ingress-nginx; node labelled `ingress-ready=true`).
 - `bootstrap.sh` — provisions the platform layer in one command: kind cluster → Argo CD →
-  ingress-nginx → root Application (app-of-apps). It also configures Argo CD for Atlas: 30s Git
-  polling and a read-only `atlas` account (apiKey only; RBAC `get`/`list` on `Applications`) that
+  ingress-nginx → root Application (app-of-apps). It also configures Argo CD for Atlas: 10s Git
+  polling with no jitter and a read-only `atlas` account (apiKey only; RBAC `get`/`list` on `Applications`) that
   atlas-api uses for the observed state. The account's token is a secret, so it is not created
   here: run `argocd-token.sh` to generate it. It does **not** provision the per-service
   resources: namespaces, the `ghcr-pull` secret and Postgres are owned by Terraform. After
